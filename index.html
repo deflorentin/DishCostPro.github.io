@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DishCost Pro — Food Cost Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --sidebar: #0f1923;
+    --surface: #161f2e;
+    --surface2: #1a2535;
+    --surface3: #1e2d40;
+    --border: #1e2d3d;
+    --border2: #243447;
+    --accent: #00b4d8;
+    --accent-dim: rgba(0,180,216,0.15);
+    --accent-glow: rgba(0,180,216,0.08);
+    --text: #e2e8f0;
+    --text-muted: #7a8ba0;
+    --text-dim: #3d5068;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --green-bg: rgba(34,197,94,0.1);
+    --yellow-bg: rgba(245,158,11,0.1);
+    --red-bg: rgba(239,68,68,0.1);
+    --radius: 6px;
+    --radius-lg: 10px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* LAYOUT */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 230px;
+    flex-shrink: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .main { flex: 1; padding: 40px 48px; max-width: 980px; }
+
+  /* SIDEBAR */
+  .brand {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .brand-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    color: #0d1117;
+  }
+  .brand-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.2px;
+  }
+  .nav { padding: 16px 12px; flex: 1; }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border: none; background: none; width: 100%; text-align: left;
+    margin-bottom: 2px;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface2); color: var(--text); font-weight: 600; }
+  .nav-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border2); flex-shrink: 0;
+  }
+  .nav-item.done .dot { background: var(--green); }
+  .nav-item.active .dot { background: var(--accent); }
+
+  .nav-reset {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: var(--radius);
+    color: #ef4444; cursor: pointer; transition: all 0.15s;
+    font-size: 13px; font-weight: 500;
+    border: none; background: none; width: 100%; text-align: left;
+    margin-top: 4px;
+  }
+  .nav-reset:hover { background: rgba(239,68,68,0.08); }
+
+  .legend { padding: 16px 20px; border-top: 1px solid var(--border); }
+  .legend-title { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .badge-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* STEPS */
+  .step { margin-bottom: 52px; opacity: 0; transform: translateY(14px); animation: fadeUp 0.35s forwards; }
+  .step:nth-child(1) { animation-delay: 0.05s; }
+  .step:nth-child(2) { animation-delay: 0.12s; }
+  .step:nth-child(3) { animation-delay: 0.19s; }
+  .step:nth-child(4) { animation-delay: 0.26s; }
+  @keyframes fadeUp { to { opacity: 1; transform: none; } }
+
+  .step-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .step-num {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent);
+    color: #0d1117;
+    font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-title { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .step-desc { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+  }
+
+  /* DROP ZONE */
+  .drop-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    background: var(--surface2);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .drop-zone input[type="file"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon { font-size: 28px; margin-bottom: 8px; }
+  .drop-title { font-weight: 500; color: var(--text-muted); margin-bottom: 4px; font-size: 14px; }
+  .drop-loaded { color: var(--green); font-weight: 600; font-size: 14px; margin-top: 4px; display: none; }
+  .drop-zone.loaded .drop-loaded { display: block; }
+  .drop-zone.loaded { border-color: var(--border2); background: var(--surface2); }
+  .drop-sub { font-size: 12px; color: var(--text-dim); }
+
+  .file-status {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; font-size: 12px; color: var(--green);
+    display: none;
+  }
+  .file-status.show { display: flex; }
+
+  /* TEMPLATE LINK */
+  .template-link {
+    font-size: 12px; color: var(--accent); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+    background: none; border: none; margin-top: 12px; display: inline-block;
+    opacity: 0.8;
+  }
+  .template-link:hover { opacity: 1; }
+
+  /* PREVIEW TABLE */
+  .preview-wrap { margin-top: 20px; overflow-x: auto; display: none; }
+  .preview-wrap.show { display: block; }
+  .preview-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table th {
+    text-align: left; padding: 10px 16px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-size: 13px;
+  }
+  table tr:last-child td { border-bottom: none; }
+  table tr:hover td { background: var(--surface2); }
+
+  /* CONTROLS */
+  .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .form-group { display: flex; flex-direction: column; gap: 7px; }
+  .form-label { font-size: 12px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.03em; }
+  .form-input, .form-select {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select option { background: var(--surface2); }
+
+  .radio-group { display: flex; flex-direction: column; gap: 8px; }
+  .radio-item { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  .radio-item input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+  .radio-item label { font-size: 13px; color: var(--text-muted); cursor: pointer; }
+  .radio-item:has(input:checked) label { color: var(--text); }
+
+  .tooltip-wrap { position: relative; display: inline-flex; align-items: center; gap: 5px; }
+  .tooltip-icon {
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--surface3); border: 1px solid var(--border2);
+    font-size: 9px; color: var(--text-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: help; flex-shrink: 0;
+  }
+  .tooltip-text {
+    display: none; position: absolute; bottom: 120%; left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface3); border: 1px solid var(--border2);
+    padding: 8px 12px; border-radius: var(--radius);
+    font-size: 12px; color: var(--text-muted);
+    width: 230px; text-align: center; z-index: 10; line-height: 1.5;
+    pointer-events: none;
+  }
+  .tooltip-icon:hover + .tooltip-text { display: block; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 18px; border-radius: var(--radius);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; transition: all 0.15s;
+    text-decoration: none; white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent); color: #0d1117;
+    width: 100%; padding: 13px;
+    font-size: 14px;
+  }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-ghost {
+    background: var(--surface2); color: var(--text-muted);
+    border: 1px solid var(--border2); font-size: 12px;
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+  .btn-outline {
+    background: transparent; color: var(--accent);
+    border: 1px solid rgba(0,180,216,0.35); font-size: 12px;
+  }
+  .btn-outline:hover { background: var(--accent-glow); }
+
+  /* ALERT */
+  .alert {
+    padding: 12px 16px; border-radius: var(--radius);
+    font-size: 13px; margin-bottom: 16px; display: none;
+  }
+  .alert.show { display: flex; align-items: flex-start; gap: 10px; }
+  .alert-error { background: var(--red-bg); border: 1px solid rgba(239,68,68,0.25); color: var(--red); }
+  .alert-success { background: var(--green-bg); border: 1px solid rgba(34,197,94,0.25); color: var(--green); }
+
+  /* SPINNER */
+  .spinner-wrap { display: none; align-items: center; gap: 12px; justify-content: center; padding: 16px; }
+  .spinner-wrap.show { display: flex; }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* SUMMARY CARDS */
+  .summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .summary-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 16px 18px;
+  }
+  .summary-card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px; }
+  .summary-card-value { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .summary-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+  /* RESULTS */
+  .results-section { display: none; }
+  .results-section.show { display: block; }
+  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .export-bar { display: flex; gap: 8px; }
+
+  /* STATUS BADGE */
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+  }
+  .status-healthy { background: var(--green-bg); color: var(--green); }
+  .status-warning { background: var(--yellow-bg); color: var(--yellow); }
+  .status-over { background: var(--red-bg); color: var(--red); }
+
+  /* RESULTS TABLE */
+  .results-table-wrap { overflow-x: auto; }
+  .results-table th { cursor: default; }
+  .results-table td.cost, .results-table td.price, .results-table td.margin {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .expand-row td { background: var(--surface2) !important; }
+  .expand-content { padding: 16px !important; }
+  .expand-row { display: none; }
+  .expand-row.open { display: table-row; }
+  .expand-inner { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .expand-inner table th { background: var(--surface3); }
+  .clickable-row { cursor: pointer; }
+  .clickable-row:hover td { background: var(--accent-glow) !important; }
+  .row-indicator { color: var(--text-dim); font-size: 10px; transition: transform 0.2s; display: inline-block; }
+  .row-indicator.open { transform: rotate(90deg); }
+
+  /* HELP BUTTON */
+  .help-btn {
+    position: fixed; bottom: 24px; right: 24px;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--accent); color: #0d1117;
+    font-size: 17px; font-weight: 700;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    z-index: 100; transition: all 0.15s; border: none;
+    box-shadow: 0 4px 20px rgba(0,180,216,0.3);
+  }
+  .help-btn:hover { filter: brightness(1.1); }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65); z-index: 200;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--radius-lg); max-width: 560px; width: 90%;
+    max-height: 80vh; overflow-y: auto; padding: 32px;
+  }
+  .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .modal-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+  .modal-section { margin-bottom: 20px; }
+  .modal-section h4 { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .modal-section p, .modal-section li { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+  .modal-section ul { padding-left: 18px; }
+  .modal-section code {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    background: var(--surface2); padding: 1px 6px;
+    border-radius: 3px; color: var(--accent);
+  }
+  .modal-close { float: right; cursor: pointer; color: var(--text-muted); font-size: 20px; background: none; border: none; line-height: 1; }
+  .modal-close:hover { color: var(--text); }
+
+  /* PAGE HEADER */
+  .page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 40px; padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-title { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+  .page-date { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+  /* INVENTORY CARDS */
+  .inv-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .inv-card-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inv-card-qty { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.2; }
+  .inv-card-meta { font-size: 11px; color: var(--text-dim); }
+  .inv-card.low { border-color: rgba(239,68,68,0.3); }
+  .inv-card.low .inv-card-qty { color: var(--red); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { padding: 28px 16px; }
+    .summary-cards { grid-template-columns: 1fr 1fr; }
+    .controls-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⊞</div>
+      <div class="brand-name">DishCost Pro</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item active" href="#step1" id="nav1">
+        <span class="dot"></span> Dashboard
+      </a>
+      <a class="nav-item" href="#step2" id="nav2">
+        <span class="dot"></span> Upload Data
+      </a>
+      <a class="nav-item" href="#step4" id="nav3">
+        <span class="dot"></span> Results
+      </a>
+      <a class="nav-item" href="#step3" id="nav4">
+        <span class="dot"></span> Export
+      </a>
+      <button class="nav-reset" onclick="resetAll()">↺ Reset App</button>
+    </nav>
+    <div class="legend">
+      <div class="legend-title">Cost Status</div>
+      <div class="legend-item"><span class="badge-dot" style="background:var(--green)"></span> Under Budget</div>
+      <div class="legend-item"><span class="badge-dot" style="background:var(--yellow)"></span> Warning (+5%)</div>
+      <div class="legend-item"><span class="badge-dot" style="background:var(--red)"></span> Over Budget</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="page-header">
+      <span class="page-title">Food Cost Calculator</span>
+      <span class="page-date" id="todayDate"></span>
+    </div>
+
+    <!-- STEP 1 -->
+    <section class="step" id="step1">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Upload Ingredient Prices</div>
+          <div class="step-desc">Required columns: <code>Ingredient Name</code>, <code>Unit</code>, <code>Unit Cost</code> &nbsp;·&nbsp; Optional: <code>Quantity on Hand</code></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="drop-zone" id="dropIngredients" ondragover="handleDragOver(event,'dropIngredients')" ondragleave="handleDragLeave('dropIngredients')" ondrop="handleDrop(event,'ingredients')">
+          <input type="file" accept=".csv,.xlsx,.xls" onchange="handleFile(event,'ingredients')">
+          <div class="drop-title">Drag &amp; drop Ingredients CSV/XLSX or click to browse</div>
+          <div class="drop-loaded">✓ File Loaded</div>
+        </div>
+        <div class="file-status" id="statusIngredients">✓ &nbsp;<span id="statusIngredientsName">File loaded</span></div>
+        <button class="template-link" onclick="downloadTemplate('ingredients')">⬇ Download Sample Ingredient Template</button>
+        <div class="preview-wrap" id="previewIngredients">
+          <div class="preview-label">Preview (first 5 rows)</div>
+          <div id="previewIngredientsTable"></div>
+        </div>
+        <div id="inventoryPanel" style="display:none; margin-top:20px;">
+          <div class="preview-label" style="margin-bottom:10px;">Inventory Overview</div>
+          <div id="inventoryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="step" id="step2">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Upload Recipes</div>
+          <div class="step-desc">One row per ingredient per dish. Required: <code>Dish Name</code>, <code>Ingredient Name</code>, <code>Quantity Used</code>, <code>Unit</code></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="drop-zone" id="dropRecipes" ondragover="handleDragOver(event,'dropRecipes')" ondragleave="handleDragLeave('dropRecipes')" ondrop="handleDrop(event,'recipes')">
+          <input type="file" accept=".csv,.xlsx,.xls" onchange="handleFile(event,'recipes')">
+          <div class="drop-title">Drag &amp; drop Recipes CSV/XLSX or click to browse</div>
+          <div class="drop-loaded">✓ File Loaded</div>
+        </div>
+        <div class="file-status" id="statusRecipes">✓ &nbsp;<span id="statusRecipesName">File loaded</span></div>
+        <button class="template-link" onclick="downloadTemplate('recipes')">⬇ Download Sample Recipe Template</button>
+        <div class="preview-wrap" id="previewRecipes">
+          <div class="preview-label">Preview (first 5 rows)</div>
+          <div id="previewRecipesTable"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="step" id="step3">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Processing Controls</div>
+          <div class="step-desc">Configure your costing parameters and run the calculation.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div id="alertBox" class="alert alert-error">
+          <span>⚠</span><span id="alertMsg">Error</span>
+        </div>
+        <div class="controls-grid">
+          <div class="form-group">
+            <label class="form-label">
+              <div class="tooltip-wrap">
+                Target Food Cost %
+                <span class="tooltip-icon">?</span>
+                <span class="tooltip-text">The percentage of menu price that goes to ingredient cost. Industry standard is 25–35%.</span>
+              </div>
+            </label>
+            <input type="number" class="form-input" id="targetFoodCost" value="30" min="1" max="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Currency Symbol</label>
+            <select class="form-select" id="currencySymbol">
+              <option value="$">$ — US Dollar</option>
+              <option value="£">£ — British Pound</option>
+              <option value="€">€ — Euro</option>
+              <option value="₱">₱ — Philippine Peso</option>
+              <option value="¥">¥ — Japanese Yen</option>
+              <option value="₹">₹ — Indian Rupee</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column: 1/-1;">
+            <label class="form-label">Markup Method</label>
+            <div class="radio-group">
+              <label class="radio-item">
+                <input type="radio" name="markup" value="foodcost" checked>
+                <label>Food Cost % Method — <span style="color:var(--text-dim)">Menu Price = Cost ÷ Target%</span></label>
+              </label>
+              <label class="radio-item">
+                <input type="radio" name="markup" value="margin">
+                <label>Gross Profit Margin Method — <span style="color:var(--text-dim)">Menu Price = Cost ÷ (1 − Target%)</span></label>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="spinner-wrap" id="spinner">
+          <div class="spinner"></div>
+          <span style="color:var(--text-muted);font-size:13px;">Crunching the numbers…</span>
+        </div>
+        <button class="btn btn-primary" id="calcBtn" onclick="calculate()">Calculate Food Costs →</button>
+      </div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="step" id="step4">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">Results & Export</div>
+          <div class="step-desc">Click any row to expand ingredient breakdown.</div>
+        </div>
+      </div>
+      <div class="results-section" id="resultsSection">
+        <div class="summary-cards" id="summaryCards"></div>
+        <div class="card">
+          <div class="results-header">
+            <span style="font-size:13px;color:var(--text-muted);" id="resultsCount"></span>
+            <div class="export-bar">
+              <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV</button>
+              <button class="btn btn-ghost" onclick="exportExcel()">⬇ Excel</button>
+              <button class="btn btn-outline" onclick="exportPDF()">⬇ PDF Report</button>
+            </div>
+          </div>
+          <div class="results-table-wrap">
+            <table class="results-table" id="resultsTable">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Dish Name</th>
+                  <th>Total Cost</th>
+                  <th>Food Cost %</th>
+                  <th>Menu Price</th>
+                  <th>Margin</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="resultsPlaceholder" style="color:var(--text-dim);font-size:13px;padding:20px 0;">
+        Results will appear here after calculation.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- HELP BUTTON -->
+<button class="help-btn" onclick="document.getElementById('helpModal').classList.add('show')">?</button>
+
+<!-- HELP MODAL -->
+<div class="modal-overlay" id="helpModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('helpModal').classList.remove('show')">×</button>
+    <div class="modal-title">How to use DishCost Pro</div>
+    <div class="modal-sub">A quick guide to getting accurate food cost results.</div>
+    <div class="modal-section">
+      <h4>Step 1 — Ingredient Price List</h4>
+      <p>Upload a CSV or Excel file with your ingredient costs. Required columns:</p>
+      <ul>
+        <li><code>Ingredient Name</code> — e.g. "Chicken Breast"</li>
+        <li><code>Unit</code> — e.g. "kg", "liter", "loaf"</li>
+        <li><code>Unit Cost</code> — the cost per unit (number only, no currency symbols)</li>
+        <li><code>Quantity on Hand</code> — <em>optional</em> — your current stock count. Shows an inventory overview panel with low-stock alerts (≤3 units highlighted in red).</li>
+      </ul>
+    </div>
+    <div class="modal-section">
+      <h4>Step 2 — Recipe Data</h4>
+      <p>One row per ingredient per dish. Required columns:</p>
+      <ul>
+        <li><code>Dish Name</code> — e.g. "Grilled Chicken"</li>
+        <li><code>Ingredient Name</code> — must match exactly to your ingredient list</li>
+        <li><code>Quantity Used</code> — amount used per serving (number)</li>
+        <li><code>Unit</code> — same unit as in your ingredient list</li>
+      </ul>
+    </div>
+    <div class="modal-section">
+      <h4>Step 3 — Processing</h4>
+      <p>Set your target food cost percentage (industry standard: 28–35%), choose your currency, and select a markup method. Then click Calculate.</p>
+    </div>
+    <div class="modal-section">
+      <h4>Export Options</h4>
+      <p>After calculation, export results as a CSV spreadsheet, Excel file, or a branded PDF report with color-coded rows.</p>
+    </div>
+    <div class="modal-section">
+      <h4>Tips</h4>
+      <ul>
+        <li>Ingredient names must match <em>exactly</em> between both files (case-insensitive)</li>
+        <li>Use the sample templates as a starting point</li>
+        <li>Units don't affect cost — they're for reference only</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────
+const state = {
+  ingredients: null, // [{name, unit, cost, qtyOnHand}]
+  recipes: null,     // [{dish, ingredient, qty, unit}]
+  results: null,
+};
+
+// ─── DATE ────────────────────────────────────────────────
+document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+// ─── SAMPLE DATA ─────────────────────────────────────────
+const SAMPLE_INGREDIENTS = `Ingredient Name,Unit,Unit Cost,Quantity on Hand
+Chicken Breast,kg,4.50,10
+Olive Oil,liter,3.20,5
+Garlic,kg,2.00,8
+Tomato Sauce,liter,1.80,12
+Pasta,kg,1.50,15
+Lettuce,kg,1.20,20
+Parmesan Cheese,kg,12.00,3
+Bread,loaf,2.50,6
+Eggs,piece,0.30,48
+Cream,liter,2.80,4
+Beef Sirloin,kg,18.00,7
+Onion,kg,0.80,10`;
+
+const SAMPLE_RECIPES = `Dish Name,Ingredient Name,Quantity Used,Unit
+Grilled Chicken,Chicken Breast,0.25,kg
+Grilled Chicken,Olive Oil,0.02,liter
+Grilled Chicken,Garlic,0.01,kg
+Pasta Pomodoro,Pasta,0.15,kg
+Pasta Pomodoro,Tomato Sauce,0.10,liter
+Pasta Pomodoro,Parmesan Cheese,0.03,kg
+Pasta Pomodoro,Garlic,0.005,kg
+Caesar Salad,Lettuce,0.20,kg
+Caesar Salad,Parmesan Cheese,0.04,kg
+Caesar Salad,Bread,0.10,loaf
+Caesar Salad,Eggs,1,piece
+Beef Steak,Beef Sirloin,0.30,kg
+Beef Steak,Garlic,0.01,kg
+Beef Steak,Olive Oil,0.02,liter
+Cream Pasta,Pasta,0.15,kg
+Cream Pasta,Cream,0.10,liter
+Cream Pasta,Parmesan Cheese,0.03,kg
+Cream Pasta,Garlic,0.005,kg`;
+
+// ─── DRAG & DROP ─────────────────────────────────────────
+function handleDragOver(e, id) {
+  e.preventDefault();
+  document.getElementById(id).classList.add('drag-over');
+}
+function handleDragLeave(id) {
+  document.getElementById(id).classList.remove('drag-over');
+}
+function handleDrop(e, type) {
+  e.preventDefault();
+  const id = type === 'ingredients' ? 'dropIngredients' : 'dropRecipes';
+  document.getElementById(id).classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file, type);
+}
+
+// ─── FILE HANDLING ────────────────────────────────────────
+function handleFile(e, type) {
+  const file = e.target.files[0];
+  if (file) processFile(file, type);
+}
+
+function processFile(file, type) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = ev => parseCSV(ev.target.result, type, file.name);
+    reader.readAsText(file);
+  } else if (['xlsx','xls'].includes(ext)) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb = XLSX.read(ev.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      parseCSV(csv, type, file.name);
+    };
+    reader.readAsBinaryString(file);
+  }
+}
+
+function parseCSV(text, type, filename) {
+  const result = Papa.parse(text, {header:true, skipEmptyLines:true, dynamicTyping:true});
+  const rows = result.data;
+  if (!rows.length) return showAlert('File appears to be empty.');
+
+  if (type === 'ingredients') {
+    const required = ['Ingredient Name','Unit','Unit Cost'];
+    const cols = Object.keys(rows[0]).map(k=>k.trim());
+    const missing = required.filter(r => !cols.some(c => c.toLowerCase() === r.toLowerCase()));
+    if (missing.length) return showAlert(`Missing columns in ingredient file: ${missing.join(', ')}`);
+    const getCol = (r, ...names) => { for (const n of names) { const v = r[n]; if (v != null) return v; } return null; };
+    state.ingredients = rows.map(r => ({
+      name: String(getCol(r,'Ingredient Name','ingredient name')||Object.values(r)[0]).trim().toLowerCase(),
+      unit: String(getCol(r,'Unit','unit')||Object.values(r)[1]).trim(),
+      cost: parseFloat(getCol(r,'Unit Cost','unit cost')||Object.values(r)[2]) || 0,
+      qtyOnHand: parseFloat(getCol(r,'Quantity on Hand','quantity on hand','Qty on Hand','qty on hand')) ?? null
+    }));
+    showFileStatus('statusIngredients', 'statusIngredientsName', filename);
+    document.getElementById('dropIngredients').classList.add('loaded');
+    showPreview(rows.slice(0,5), 'previewIngredients', 'previewIngredientsTable');
+    renderInventory();
+    updateNav('nav1', true);
+  } else {
+    const required = ['Dish Name','Ingredient Name','Quantity Used','Unit'];
+    const cols = Object.keys(rows[0]).map(k=>k.trim());
+    const missing = required.filter(r => !cols.some(c => c.toLowerCase() === r.toLowerCase()));
+    if (missing.length) return showAlert(`Missing columns in recipe file: ${missing.join(', ')}`);
+    state.recipes = rows.map(r => ({
+      dish: String(r['Dish Name']||r['dish name']||Object.values(r)[0]).trim(),
+      ingredient: String(r['Ingredient Name']||r['ingredient name']||Object.values(r)[1]).trim().toLowerCase(),
+      qty: parseFloat(r['Quantity Used']||r['quantity used']||Object.values(r)[2]) || 0,
+      unit: String(r['Unit']||r['unit']||Object.values(r)[3]).trim()
+    }));
+    showFileStatus('statusRecipes', 'statusRecipesName', filename);
+    document.getElementById('dropRecipes').classList.add('loaded');
+    showPreview(rows.slice(0,5), 'previewRecipes', 'previewRecipesTable');
+    updateNav('nav2', true);
+  }
+  hideAlert();
+}
+
+function showFileStatus(statusId, nameId, filename) {
+  document.getElementById(nameId).textContent = filename;
+  document.getElementById(statusId).classList.add('show');
+}
+
+function showPreview(rows, wrapId, tableId) {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  let html = '<table><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>' + cols.map(c=>`<td>${r[c]??''}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById(tableId).innerHTML = html;
+  document.getElementById(wrapId).classList.add('show');
+}
+
+// ─── INVENTORY PANEL ─────────────────────────────────────
+function renderInventory() {
+  const panel = document.getElementById('inventoryPanel');
+  const grid = document.getElementById('inventoryGrid');
+  const hasQty = state.ingredients.some(i => i.qtyOnHand !== null && !isNaN(i.qtyOnHand));
+  if (!hasQty) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  grid.innerHTML = state.ingredients.map(i => {
+    const qty = i.qtyOnHand;
+    const hasQ = qty !== null && !isNaN(qty);
+    const low = hasQ && qty <= 3;
+    return `<div class="inv-card${low?' low':''}">
+      <div class="inv-card-name" title="${i.name.replace(/\b\w/g,c=>c.toUpperCase())}">${i.name.replace(/\b\w/g,c=>c.toUpperCase())}</div>
+      <div class="inv-card-qty">${hasQ ? qty : '—'}</div>
+      <div class="inv-card-meta">${i.unit} &nbsp;·&nbsp; ${hasQ?(low?'⚠ Low stock':'In stock'):'No qty data'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── TEMPLATES ────────────────────────────────────────────
+function downloadTemplate(type) {
+  const content = type === 'ingredients' ? SAMPLE_INGREDIENTS : SAMPLE_RECIPES;
+  const filename = type === 'ingredients' ? 'ingredient_template.csv' : 'recipe_template.csv';
+  const blob = new Blob([content], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ─── CALCULATE ────────────────────────────────────────────
+function calculate() {
+  hideAlert();
+  if (!state.ingredients) return showAlert('Please upload an Ingredient Price List first (Step 1).');
+  if (!state.recipes) return showAlert('Please upload a Recipe file first (Step 2).');
+
+  const target = parseFloat(document.getElementById('targetFoodCost').value);
+  if (!target || target < 1 || target > 100) return showAlert('Target Food Cost % must be between 1 and 100.');
+
+  document.getElementById('calcBtn').disabled = true;
+  document.getElementById('spinner').classList.add('show');
+
+  setTimeout(() => {
+    const currency = document.getElementById('currencySymbol').value;
+    const method = document.querySelector('input[name="markup"]:checked').value;
+
+    const ingredientMap = {};
+    state.ingredients.forEach(i => { ingredientMap[i.name] = i.cost; });
+
+    const dishes = {};
+    const dishIngredients = {};
+    state.recipes.forEach(r => {
+      if (!dishes[r.dish]) { dishes[r.dish] = 0; dishIngredients[r.dish] = []; }
+      const cost = ingredientMap[r.ingredient];
+      const lineCost = cost != null ? r.qty * cost : 0;
+      dishes[r.dish] += lineCost;
+      dishIngredients[r.dish].push({
+        ingredient: r.ingredient, qty: r.qty, unit: r.unit,
+        unitCost: cost ?? 0, lineCost
+      });
+    });
+
+    const pct = target / 100;
+    const results = Object.entries(dishes).map(([dish, totalCost]) => {
+      const menuPrice = method === 'foodcost' ? totalCost / pct : totalCost / (1 - pct);
+      const margin = menuPrice - totalCost;
+      const fcp = (totalCost / menuPrice) * 100;
+      let status = 'healthy';
+      if (fcp > target + 5) status = 'over';
+      else if (fcp > target) status = 'warning';
+      return { dish, totalCost, menuPrice, margin, fcp, status, breakdown: dishIngredients[dish] };
+    });
+
+    state.results = results;
+    renderResults(results, currency, target);
+
+    document.getElementById('calcBtn').disabled = false;
+    document.getElementById('spinner').classList.remove('show');
+    updateNav('nav3', true);
+    updateNav('nav4', true);
+    document.getElementById('step4').scrollIntoView({behavior:'smooth'});
+  }, 1200);
+}
+
+// ─── RENDER RESULTS ───────────────────────────────────────
+function renderResults(results, currency, target) {
+  const fmt = n => currency + n.toFixed(2);
+  const avgFCP = results.reduce((a,r)=>a+r.fcp,0)/results.length;
+  const mostExpensive = results.reduce((a,b)=>a.totalCost>b.totalCost?a:b);
+  const mostProfitable = results.reduce((a,b)=>a.margin>b.margin?a:b);
+
+  // Summary cards
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="summary-card">
+      <div class="summary-card-label">Dishes Costed</div>
+      <div class="summary-card-value">${results.length}</div>
+      <div class="summary-card-sub">Total menu items</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-label">Avg Food Cost %</div>
+      <div class="summary-card-value">${avgFCP.toFixed(1)}%</div>
+      <div class="summary-card-sub">Target: ${target}%</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-label">Most Expensive</div>
+      <div class="summary-card-value">${fmt(mostExpensive.totalCost)}</div>
+      <div class="summary-card-sub">${mostExpensive.dish}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-card-label">Most Profitable</div>
+      <div class="summary-card-value">${fmt(mostProfitable.margin)}</div>
+      <div class="summary-card-sub">${mostProfitable.dish}</div>
+    </div>
+  `;
+
+  document.getElementById('resultsCount').textContent = `${results.length} dishes calculated`;
+
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = '';
+  results.forEach((r, i) => {
+    const statusMap = {
+      healthy: ['status-healthy','🟢 Healthy'],
+      warning: ['status-warning','🟡 Warning'],
+      over: ['status-over','🔴 Over Budget']
+    };
+    const [cls, label] = statusMap[r.status];
+
+    const mainRow = document.createElement('tr');
+    mainRow.className = 'clickable-row';
+    mainRow.innerHTML = `
+      <td><span class="row-indicator" id="ind${i}">▶</span></td>
+      <td><strong>${r.dish}</strong></td>
+      <td class="cost">${fmt(r.totalCost)}</td>
+      <td class="cost">${r.fcp.toFixed(1)}%</td>
+      <td class="price">${fmt(r.menuPrice)}</td>
+      <td class="margin">${fmt(r.margin)}</td>
+      <td><span class="status-badge ${cls}">${label}</span></td>
+    `;
+    mainRow.onclick = () => toggleRow(i);
+
+    const breakdownRow = document.createElement('tr');
+    breakdownRow.className = 'expand-row';
+    breakdownRow.id = `expand${i}`;
+    const bHtml = r.breakdown.map(b =>
+      `<tr><td>${b.ingredient}</td><td style="font-family:'DM Mono',monospace">${b.qty} ${b.unit}</td><td style="font-family:'DM Mono',monospace">${fmt(b.unitCost)}</td><td style="font-family:'DM Mono',monospace">${fmt(b.lineCost)}</td></tr>`
+    ).join('');
+    breakdownRow.innerHTML = `<td colspan="7" class="expand-content">
+      <div class="expand-inner">
+        <table>
+          <thead><tr><th>Ingredient</th><th>Quantity</th><th>Unit Cost</th><th>Line Total</th></tr></thead>
+          <tbody>${bHtml}</tbody>
+        </table>
+      </div>
+    </td>`;
+
+    tbody.appendChild(mainRow);
+    tbody.appendChild(breakdownRow);
+  });
+
+  document.getElementById('resultsPlaceholder').style.display = 'none';
+  document.getElementById('resultsSection').classList.add('show');
+}
+
+function toggleRow(i) {
+  const row = document.getElementById(`expand${i}`);
+  const ind = document.getElementById(`ind${i}`);
+  row.classList.toggle('open');
+  ind.classList.toggle('open');
+}
+
+// ─── EXPORT ──────────────────────────────────────────────
+function exportCSV() {
+  if (!state.results) return;
+  const currency = document.getElementById('currencySymbol').value;
+  let csv = 'Dish Name,Total Cost,Food Cost %,Menu Price,Margin,Status\n';
+  state.results.forEach(r => {
+    csv += `"${r.dish}",${r.totalCost.toFixed(2)},${r.fcp.toFixed(1)}%,${r.menuPrice.toFixed(2)},${r.margin.toFixed(2)},${r.status}\n`;
+  });
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dishcost_results.csv';
+  a.click();
+}
+
+function exportExcel() {
+  if (!state.results) return;
+  const currency = document.getElementById('currencySymbol').value;
+  const data = [['Dish Name','Total Cost','Food Cost %','Menu Price','Margin','Status']];
+  state.results.forEach(r => {
+    data.push([r.dish, r.totalCost.toFixed(2), r.fcp.toFixed(1)+'%', r.menuPrice.toFixed(2), r.margin.toFixed(2), r.status]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Results');
+  XLSX.writeFile(wb, 'dishcost_results.xlsx');
+}
+
+function exportPDF() {
+  if (!state.results) return;
+  const currency = document.getElementById('currencySymbol').value;
+  const target = document.getElementById('targetFoodCost').value;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Header
+  doc.setFillColor(10,10,10);
+  doc.rect(0,0,210,40,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.setTextColor(200,169,110);
+  doc.text('DishCost Pro', 14, 18);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(180,180,180);
+  doc.text('Food Cost Analysis Report', 14, 26);
+  doc.text(new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}), 14, 33);
+
+  // Summary
+  doc.setTextColor(40,40,40);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.text('Summary', 14, 52);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9);
+  const avgFCP = state.results.reduce((a,r)=>a+r.fcp,0)/state.results.length;
+  doc.text(`Total Dishes: ${state.results.length}   |   Avg Food Cost: ${avgFCP.toFixed(1)}%   |   Target: ${target}%`, 14, 60);
+
+  // Table
+  const rows = state.results.map(r => [
+    r.dish,
+    currency + r.totalCost.toFixed(2),
+    r.fcp.toFixed(1)+'%',
+    currency + r.menuPrice.toFixed(2),
+    currency + r.margin.toFixed(2),
+    r.status.charAt(0).toUpperCase()+r.status.slice(1)
+  ]);
+
+  doc.autoTable({
+    head: [['Dish Name','Total Cost','Food Cost %','Menu Price','Margin','Status']],
+    body: rows,
+    startY: 68,
+    styles: { fontSize: 9, cellPadding: 4 },
+    headStyles: { fillColor: [30,30,30], textColor: [200,169,110], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248,248,248] },
+    didParseCell: data => {
+      if (data.section === 'body' && data.column.index === 5) {
+        const v = data.cell.raw.toLowerCase();
+        if (v === 'healthy') { data.cell.styles.textColor = [34,197,94]; data.cell.styles.fontStyle = 'bold'; }
+        else if (v === 'warning') { data.cell.styles.textColor = [202,138,4]; data.cell.styles.fontStyle = 'bold'; }
+        else if (v === 'over budget') { data.cell.styles.textColor = [220,38,38]; data.cell.styles.fontStyle = 'bold'; }
+      }
+    }
+  });
+
+  // Footer
+  const pageH = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(160,160,160);
+  doc.text('Generated by DishCost Pro', 14, pageH - 10);
+
+  doc.save('dishcost_report.pdf');
+}
+
+// ─── ALERTS ──────────────────────────────────────────────
+function showAlert(msg) {
+  document.getElementById('alertMsg').textContent = msg;
+  document.getElementById('alertBox').classList.add('show');
+  document.getElementById('step3').scrollIntoView({behavior:'smooth'});
+}
+function hideAlert() {
+  document.getElementById('alertBox').classList.remove('show');
+}
+
+// ─── NAV ─────────────────────────────────────────────────
+function updateNav(id, done) {
+  const el = document.getElementById(id);
+  if (done) { el.classList.add('done'); el.classList.remove('active'); }
+}
+
+// ─── RESET ───────────────────────────────────────────────
+function resetAll() {
+  state.ingredients = null;
+  state.recipes = null;
+  state.results = null;
+  ['dropIngredients','dropRecipes'].forEach(id=>{
+    document.getElementById(id).classList.remove('loaded','drag-over');
+  });
+  ['statusIngredients','statusRecipes'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+  });
+  ['previewIngredients','previewRecipes'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+  });
+  document.getElementById('inventoryPanel').style.display = 'none';
+  document.getElementById('inventoryGrid').innerHTML = '';
+  document.getElementById('resultsSection').classList.remove('show');
+  document.getElementById('resultsPlaceholder').style.display = '';
+  document.getElementById('resultsBody').innerHTML = '';
+  document.getElementById('summaryCards').innerHTML = '';
+  hideAlert();
+  ['nav1','nav2','nav3','nav4'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.classList.remove('done','active');
+  });
+  document.getElementById('nav1').classList.add('active');
+  document.getElementById('step1').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
